@@ -6,6 +6,8 @@ import com.ticketflow.booking.application.exception.IdempotencyKeyAlreadyUsedExc
 import com.ticketflow.booking.application.exception.SeatAlreadyBookedException;
 import com.ticketflow.booking.domain.entity.*;
 import com.ticketflow.booking.domain.repository.*;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,7 @@ public class BookingService {
     private final IdempotencyKeyRepository idempotencyKeyRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
+    private final Tracer tracer;
 
     private static final int RESERVATION_DURATION_MINUTES = 10;
 
@@ -33,13 +36,26 @@ public class BookingService {
     public Booking createBooking(BookingRequest request) {
         log.info("Processing booking request for user: {}, seat: {}", request.userId(), request.seatId());
 
-        // Idempotency check
-        if (idempotencyKeyRepository.findByKey(request.idempotencyKey()).isPresent()) {
-            throw new IdempotencyKeyAlreadyUsedException(request.idempotencyKey());
+        Span idempotencySpan = tracer.spanBuilder().name("check-idempotency").start();
+        try (Tracer.SpanInScope scope = tracer.withSpan(idempotencySpan)) {
+            if (idempotencyKeyRepository.findByKey(request.idempotencyKey()).isPresent()) {
+                throw new IdempotencyKeyAlreadyUsedException(request.idempotencyKey());
+            }
+        } finally {
+            idempotencySpan.end();
         }
 
-        Seat seat = seatRepository.findByIdForUpdate(request.seatId())
-                .orElseThrow(() -> new IllegalArgumentException("Seat not found: " + request.seatId()));
+        Span lockSpan = tracer.spanBuilder().name("lock-seat").start();
+        Seat seat;
+        try (Tracer.SpanInScope scope = tracer.withSpan(lockSpan)) {
+            seat = seatRepository.findByIdForUpdate(request.seatId())
+                    .orElseThrow(() -> new IllegalArgumentException("Seat not found: " + request.seatId()));
+            lockSpan.tag("seat.id", String.valueOf(seat.getId()));
+            lockSpan.tag("seat.row", seat.getRowNumber());
+            lockSpan.tag("seat.number", seat.getSeatNumber());
+        } finally {
+            lockSpan.end();
+        }
 
         Event event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> new IllegalArgumentException("Event not found: " + request.eventId()));
@@ -70,7 +86,8 @@ public class BookingService {
                 .createdAt(OffsetDateTime.now())
                 .build());
 
-        try {
+        Span outboxSpan = tracer.spanBuilder().name("create-outbox-event").start();
+        try (Tracer.SpanInScope scope = tracer.withSpan(outboxSpan)) {
             String payload = objectMapper.writeValueAsString(Map.of(
                     "bookingId", savedBooking.getId(),
                     "eventId", event.getId(),
@@ -90,10 +107,14 @@ public class BookingService {
                     .build();
 
             outboxEventRepository.save(outboxEvent);
+            outboxSpan.tag("outbox.eventId", outboxEvent.getId().toString());
             log.info("Outbox event created for booking: {}", savedBooking.getId());
         } catch (Exception e) {
+            outboxSpan.error(e);
             log.error("Failed to serialize outbox payload", e);
             throw new RuntimeException("Failed to create outbox event", e);
+        } finally {
+            outboxSpan.end();
         }
 
         return savedBooking;

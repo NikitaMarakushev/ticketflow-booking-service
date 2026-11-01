@@ -1,4 +1,3 @@
--- Таблица мест проведения (Venue)
 CREATE TABLE venues (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -9,7 +8,6 @@ CREATE TABLE venues (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Таблица мероприятий (Event)
 CREATE TABLE events (
     id BIGSERIAL PRIMARY KEY,
     venue_id BIGINT NOT NULL REFERENCES venues(id),
@@ -21,7 +19,6 @@ CREATE TABLE events (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Таблица мест (Seat)
 CREATE TABLE seats (
     id BIGSERIAL PRIMARY KEY,
     venue_id BIGINT NOT NULL REFERENCES venues(id),
@@ -32,7 +29,6 @@ CREATE TABLE seats (
     UNIQUE(venue_id, row_number, seat_number)
 );
 
--- Таблица бронирований (Booking)
 CREATE TABLE bookings (
     id BIGSERIAL PRIMARY KEY,
     event_id BIGINT NOT NULL REFERENCES events(id),
@@ -44,7 +40,6 @@ CREATE TABLE bookings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Таблица платежей (Payment)
 CREATE TABLE payments (
     id BIGSERIAL PRIMARY KEY,
     booking_id BIGINT NOT NULL REFERENCES bookings(id),
@@ -57,7 +52,6 @@ CREATE TABLE payments (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Таблица для идемпотентности
 CREATE TABLE idempotency_keys (
     key VARCHAR(255) PRIMARY KEY,
     response_status INTEGER,
@@ -65,7 +59,6 @@ CREATE TABLE idempotency_keys (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Индексы для производительности
 CREATE INDEX idx_events_venue_id ON events(venue_id);
 CREATE INDEX idx_events_event_date ON events(event_date);
 CREATE INDEX idx_events_status ON events(status);

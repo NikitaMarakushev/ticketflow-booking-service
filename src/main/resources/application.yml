@@ -8,8 +8,8 @@ spring:
     password: ticketflow
     driver-class-name: org.postgresql.Driver
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+      maximum-pool-size: 50
+      minimum-idle: 10
   
   jpa:
     hibernate:
@@ -59,8 +59,20 @@ management:
     export:
       prometheus:
         enabled: true
+  tracing:
+    enabled: true
+    sampling:
+      probability: 1.0
+    propagation:
+      produce: b3
+      consume: b3
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
+      transport: http
 
 logging:
   level:
-    org.flywaydb: DEBUG
+    org.flywaydb: INFO
     org.hibernate.SQL: DEBUG
+    io.opentelemetry: DEBUG
