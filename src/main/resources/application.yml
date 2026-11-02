@@ -76,3 +76,18 @@ logging:
     org.flywaydb: INFO
     org.hibernate.SQL: DEBUG
     io.opentelemetry: DEBUG
+    com.giffing.bucket4j: DEBUG
+
+bucket4j:
+  enabled: true
+  filters:
+    - cache-name: buckets
+      url: "/api/v1/bookings"
+      http-response-body: '{"status": 429, "message": "Too many requests. Please try again later."}'
+      rate-limits:
+        - expression: "getRemoteAddr()"
+          execute-condition: "getRemoteAddr() != null"
+          bandwidths:
+            - capacity: 5
+              time: 1
+              unit: minutes
